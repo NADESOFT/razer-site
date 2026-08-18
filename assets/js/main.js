@@ -7,15 +7,14 @@ const RECAPTCHA_SITE_KEY = "6Lfvu4wtAAAAANdQaJgY0e6CGwogWHFYIP1BpI5B";
 const USD_TO_BDT_RATE = 122; // placeholder exchange rate, update as needed
 
 // Keep in sync with the denomination <option> values / product cards in index.html.
-// Prices are face value discounted 17% (DISCOUNT_RATE below) — update both if the discount changes.
-const DISCOUNT_RATE = 0.17;
+// Discount tiers scale up with denomination — bigger cards get bigger savings, from 15% up to 17%.
 const DENOMINATIONS = [
-  { value: "5", face: 5.0, price: 4.15 },
-  { value: "10", face: 10.0, price: 8.3 },
-  { value: "20", face: 20.0, price: 16.6 },
-  { value: "25", face: 25.0, price: 20.75 },
-  { value: "50", face: 50.0, price: 41.5 },
-  { value: "100", face: 100.0, price: 83.0 },
+  { value: "5", face: 5.0, price: 4.25, discount: 0.15 },
+  { value: "10", face: 10.0, price: 8.5, discount: 0.15 },
+  { value: "20", face: 20.0, price: 16.8, discount: 0.16 },
+  { value: "25", face: 25.0, price: 21.0, discount: 0.16 },
+  { value: "50", face: 50.0, price: 41.5, discount: 0.17 },
+  { value: "100", face: 100.0, price: 83.0, discount: 0.17 },
 ];
 
 document.getElementById("year").textContent = new Date().getFullYear();
@@ -26,7 +25,8 @@ document.getElementById("year").textContent = new Date().getFullYear();
   if (!tbody) return;
   tbody.innerHTML = DENOMINATIONS.map((d) => {
     const bdt = Math.round(d.price * USD_TO_BDT_RATE);
-    return `<tr><td>$${d.value}</td><td>$${d.price.toFixed(2)}</td><td>৳${bdt.toLocaleString("en-US")}</td></tr>`;
+    const saveUsd = (d.face - d.price).toFixed(2);
+    return `<tr><td>Razer Gold $${d.value}</td><td>$${d.price.toFixed(2)}</td><td class="save-cell">-${Math.round(d.discount * 100)}% ($${saveUsd})</td><td>৳${bdt.toLocaleString("en-US")}</td></tr>`;
   }).join("");
 })();
 
@@ -55,9 +55,16 @@ function updatePriceSummary() {
     label = "You pay via Binance Pay";
     value = `$${denom.price.toFixed(2)} USD`;
   }
+  const saveUsd = (denom.face - denom.price).toFixed(2);
+  const savePct = Math.round(denom.discount * 100);
 
   priceSummary.hidden = false;
-  priceSummary.innerHTML = `<span class="price-label">${label}</span><span class="price-value">${value}</span>`;
+  priceSummary.innerHTML = `
+    <span class="price-label">${label}</span>
+    <span class="price-value-group">
+      <span class="price-value">${value}</span>
+      <span class="price-savings">You save $${saveUsd} (${savePct}% off)</span>
+    </span>`;
 }
 
 if (denominationSelect) {
@@ -68,19 +75,148 @@ document.querySelectorAll('input[name="paymentMethod"]').forEach((radio) => {
 });
 updatePriceSummary();
 
-/* ---------- Product card "Select" pre-fills the order form ---------- */
-document.querySelectorAll(".select-denom").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const card = btn.closest(".product-card");
+/* ---------- Product cards: whole card is clickable, selects the denomination ---------- */
+(function setupProductCards() {
+  const grid = document.querySelector(".product-grid");
+  if (!grid) return;
+  const cards = Array.from(grid.querySelectorAll(".product-card"));
+
+  cards.forEach((card) => {
+    const denom = DENOMINATIONS.find(
+      (d) => d.value === card.getAttribute("data-denom"),
+    );
+    if (denom) {
+      const saveUsd = (denom.face - denom.price).toFixed(2);
+      card.setAttribute(
+        "aria-label",
+        `Select Razer Gold $${denom.value} — pay $${denom.price.toFixed(2)}, save $${saveUsd}`,
+      );
+    }
+  });
+
+  function chooseCard(card) {
     const denom = card.getAttribute("data-denom");
-    const select = document.getElementById("denomination");
-    if (select) select.value = denom;
-    updatePriceSummary();
+    if (denominationSelect) {
+      denominationSelect.value = denom;
+      denominationSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    }
     document
       .getElementById("order")
       .scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  grid.addEventListener("click", (e) => {
+    const card = e.target.closest(".product-card");
+    if (card) chooseCard(card);
   });
-});
+  grid.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const card = e.target.closest(".product-card");
+    if (!card) return;
+    e.preventDefault();
+    chooseCard(card);
+  });
+})();
+
+/* ---------- Custom dropdown for the Razer Gold Card field ---------- */
+(function setupCustomSelect() {
+  const trigger = document.getElementById("denomination-trigger");
+  const valueEl = document.getElementById("denomination-value");
+  const listbox = document.getElementById("denomination-listbox");
+  if (!trigger || !valueEl || !listbox || !denominationSelect) return;
+
+  listbox.innerHTML = DENOMINATIONS.map((d) => {
+    const savePct = Math.round(d.discount * 100);
+    return `
+      <li role="option" class="custom-select-option" id="denom-opt-${d.value}" data-value="${d.value}" tabindex="-1" aria-selected="false">
+        <span class="opt-name">Razer Gold $${d.value}</span>
+        <span class="opt-price"><s>$${d.face.toFixed(2)}</s> $${d.price.toFixed(2)} <span class="opt-discount">-${savePct}%</span></span>
+      </li>`;
+  }).join("");
+
+  const options = Array.from(
+    listbox.querySelectorAll(".custom-select-option"),
+  );
+
+  function closeListbox() {
+    listbox.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+  }
+
+  function openListbox() {
+    listbox.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+    const current =
+      options.find((o) => o.dataset.value === denominationSelect.value) ||
+      options[0];
+    if (current) current.focus();
+  }
+
+  function syncTriggerLabel() {
+    const denom = DENOMINATIONS.find(
+      (d) => d.value === denominationSelect.value,
+    );
+    valueEl.textContent = denom
+      ? `Razer Gold $${denom.value}`
+      : "Select a Razer Gold Card";
+    valueEl.classList.toggle("is-placeholder", !denom);
+    options.forEach((o) => {
+      o.setAttribute(
+        "aria-selected",
+        String(o.dataset.value === denominationSelect.value),
+      );
+    });
+  }
+
+  function selectValue(value) {
+    denominationSelect.value = value;
+    denominationSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    closeListbox();
+    trigger.focus();
+  }
+
+  trigger.addEventListener("click", () => {
+    if (listbox.hidden) openListbox();
+    else closeListbox();
+  });
+
+  trigger.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openListbox();
+    }
+  });
+
+  options.forEach((option, index) => {
+    option.addEventListener("click", () => selectValue(option.dataset.value));
+    option.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        selectValue(option.dataset.value);
+      } else if (e.key === "Escape") {
+        closeListbox();
+        trigger.focus();
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        (options[index + 1] || options[0]).focus();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        (options[index - 1] || options[options.length - 1]).focus();
+      } else if (e.key === "Tab") {
+        closeListbox();
+      }
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!listbox.hidden && !e.target.closest(".custom-select")) {
+      closeListbox();
+    }
+  });
+
+  denominationSelect.addEventListener("change", syncTriggerLabel);
+  syncTriggerLabel();
+})();
 
 /* ---------- Copy-to-clipboard ---------- */
 document.querySelectorAll(".copy-btn").forEach((btn) => {
@@ -165,6 +301,11 @@ async function getRecaptchaToken() {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   showStatus("", "");
+
+  if (!denominationSelect.value) {
+    showStatus("Please select a Razer Gold Card.", "error");
+    return;
+  }
 
   if (!form.checkValidity()) {
     form.reportValidity();

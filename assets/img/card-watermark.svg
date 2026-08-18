@@ -1,0 +1,13 @@
+<!--
+  Decorative watermark used faintly behind product cards. This is the site's
+  own diamond mark (same shape as the header logo/favicon) — NOT Razer's
+  trademarked logo. We deliberately avoid using Razer's actual logo here
+  since Keys.bd is an independent, unaffiliated reseller (see the FAQ
+  disclaimer in index.html); embedding Razer's real brand mark as site
+  decoration could misleadingly imply an official partnership. Swap this
+  file for a licensed asset only if you have the rights to use one.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M50 4L96 50L50 96L4 50L50 4Z" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+  <path d="M50 28L72 50L50 72L28 50L50 28Z" fill="#FFFFFF"/>
+</svg>

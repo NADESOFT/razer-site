@@ -1,4 +1,4 @@
-# RazerGold BD — Static Storefront
+# Keys.bd — Static Storefront
 
 A single-page, no-backend site for selling Razer Gold PIN codes. Orders are collected
 into a Google Sheet via a Google Apps Script Web App; payment (Binance crypto or bKash)
@@ -33,19 +33,17 @@ and code delivery are handled manually by you.
    - Paste it into `assets/js/main.js` → `APPS_SCRIPT_URL`.
 
 5. **Binance Pay**
-   - In the Binance app: Profile → Pay, to find your Pay ID and QR code.
-   - In `index.html`, replace `BINANCE_PAY_ID_PLACEHOLDER` with your real Pay ID.
-   - Replace `assets/img/binance.png` with your real QR code image (update the `<img>` `src`/`alt` in the payment section if you change the filename or format).
+   - Already configured: Pay ID `48416808` and the real QR code at `assets/img/binance.png` are wired into the payment section of `index.html`. Double-check these are correct before launch.
 
 6. **bKash**
    - The personal number `01773371221` is already set in `index.html`. Double check it's correct and active for Send Money before launch.
 
 7. **Pricing**
-   - Prices are set at 17% off face value (e.g. a $5 card sells for $4.15) and are defined in two places that must be kept in sync: the product cards and price display in `index.html`, and the `DENOMINATIONS` array (plus `DISCOUNT_RATE`) in `assets/js/main.js`.
+   - Prices are discounted 15-17% off face value, scaling up with the card size (e.g. $5 card = 15% off = $4.25; $100 card = 17% off = $83.00). Defined in two places that must be kept in sync: the product cards in `index.html`, and the `DENOMINATIONS` array in `assets/js/main.js`.
    - Update `USD_TO_BDT_RATE` in `assets/js/main.js` to a current exchange rate.
 
 8. **Contact email**
-   - Replace `YOUR-EMAIL@example.com` in `index.html` (footer and JSON-LD) with your real support email.
+   - Already set to `nadesoftwares@gmail.com` in `index.html` (footer and JSON-LD). Update it there if that changes.
 
 9. **Domain / URLs**
    - `index.html`, `sitemap.xml`, and `robots.txt` are already set to `https://keys.bd/`. If you decide to use `www.keys.bd` as the canonical instead, update those files accordingly.
