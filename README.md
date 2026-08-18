@@ -35,13 +35,13 @@ and code delivery are handled manually by you.
 5. **Binance Pay**
    - In the Binance app: Profile → Pay, to find your Pay ID and QR code.
    - In `index.html`, replace `BINANCE_PAY_ID_PLACEHOLDER` with your real Pay ID.
-   - Replace `assets/img/binance-qr-placeholder.svg` with your real QR code image (update the `<img>` `src`/`alt` in the payment section if you change the filename or format).
+   - Replace `assets/img/binance.png` with your real QR code image (update the `<img>` `src`/`alt` in the payment section if you change the filename or format).
 
 6. **bKash**
    - The personal number `01773371221` is already set in `index.html`. Double check it's correct and active for Send Money before launch.
 
 7. **Pricing**
-   - Denomination prices are defined in two places that must be kept in sync: the product cards and order form `<select>` in `index.html`, and the `DENOMINATIONS` array in `assets/js/main.js`.
+   - Prices are set at 17% off face value (e.g. a $5 card sells for $4.15) and are defined in two places that must be kept in sync: the product cards and price display in `index.html`, and the `DENOMINATIONS` array (plus `DISCOUNT_RATE`) in `assets/js/main.js`.
    - Update `USD_TO_BDT_RATE` in `assets/js/main.js` to a current exchange rate.
 
 8. **Contact email**

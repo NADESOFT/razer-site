@@ -24,10 +24,7 @@
       property="og:description"
       content="Buy Razer Gold PIN codes instantly. Pay securely via Binance crypto or bKash. Orders are manually verified and delivered by email."
     />
-    <meta
-      property="og:url"
-      content="https://keys.bd/"
-    />
+    <meta property="og:url" content="https://keys.bd/" />
     <meta
       property="og:image"
       content="https://keys.bd/assets/img/og-image.svg"
@@ -85,8 +82,8 @@
         "offers": {
           "@type": "AggregateOffer",
           "priceCurrency": "USD",
-          "lowPrice": "5.00",
-          "highPrice": "100.00",
+          "lowPrice": "4.15",
+          "highPrice": "83.00",
           "offerCount": "6",
           "availability": "https://schema.org/InStock"
         }
@@ -206,48 +203,66 @@
         <div class="container">
           <h2>Choose Your Denomination</h2>
           <p class="section-sub">
-            All prices in USD.
+            All prices in USD &mdash; 17% off face value.
             <!-- PLACEHOLDER PRICING: update before launch -->
           </p>
           <div class="product-grid">
-            <article class="product-card" data-denom="5" data-price="5.00">
-              <span class="product-face">$5</span>
-              <span class="product-price">$5.00</span>
+            <article class="product-card" data-denom="5" data-price="4.15">
+              <span class="discount-badge">-17%</span>
+              <span class="product-face">Razer Gold $5</span>
+              <span class="product-price"
+                ><s class="price-was">$5.00</s> $4.15</span
+              >
               <button type="button" class="btn btn-outline select-denom">
                 Select
               </button>
             </article>
-            <article class="product-card" data-denom="10" data-price="10.00">
-              <span class="product-face">$10</span>
-              <span class="product-price">$10.00</span>
+            <article class="product-card" data-denom="10" data-price="8.30">
+              <span class="discount-badge">-17%</span>
+              <span class="product-face">Razer Gold $10</span>
+              <span class="product-price"
+                ><s class="price-was">$10.00</s> $8.30</span
+              >
               <button type="button" class="btn btn-outline select-denom">
                 Select
               </button>
             </article>
-            <article class="product-card" data-denom="20" data-price="20.00">
-              <span class="product-face">$20</span>
-              <span class="product-price">$20.00</span>
+            <article class="product-card" data-denom="20" data-price="16.60">
+              <span class="discount-badge">-17%</span>
+              <span class="product-face">Razer Gold $20</span>
+              <span class="product-price"
+                ><s class="price-was">$20.00</s> $16.60</span
+              >
               <button type="button" class="btn btn-outline select-denom">
                 Select
               </button>
             </article>
-            <article class="product-card" data-denom="25" data-price="25.00">
-              <span class="product-face">$25</span>
-              <span class="product-price">$25.00</span>
+            <article class="product-card" data-denom="25" data-price="20.75">
+              <span class="discount-badge">-17%</span>
+              <span class="product-face">Razer Gold $25</span>
+              <span class="product-price"
+                ><s class="price-was">$25.00</s> $20.75</span
+              >
               <button type="button" class="btn btn-outline select-denom">
                 Select
               </button>
             </article>
-            <article class="product-card" data-denom="50" data-price="50.00">
-              <span class="product-face">$50</span>
-              <span class="product-price">$50.00</span>
+            <article class="product-card" data-denom="50" data-price="41.50">
+              <span class="discount-badge">-17%</span>
+              <span class="product-face">Razer Gold $50</span>
+              <span class="product-price"
+                ><s class="price-was">$50.00</s> $41.50</span
+              >
               <button type="button" class="btn btn-outline select-denom">
                 Select
               </button>
             </article>
-            <article class="product-card" data-denom="100" data-price="100.00">
-              <span class="product-face">$100</span>
-              <span class="product-price">$100.00</span>
+            <article class="product-card" data-denom="100" data-price="83.00">
+              <span class="discount-badge">-17%</span>
+              <span class="product-face">Razer Gold $100</span>
+              <span class="product-price"
+                ><s class="price-was">$100.00</s> $83.00</span
+              >
               <button type="button" class="btn btn-outline select-denom">
                 Select
               </button>
@@ -299,13 +314,13 @@
               </p>
               <img
                 class="qr-image"
-                src="assets/img/binance-qr-placeholder.svg"
+                src="assets/img/binance.png"
                 alt="Binance Pay QR code"
                 width="180"
                 height="180"
               />
               <div class="copy-row">
-                <code id="binance-pay-id">BINANCE_PAY_ID_PLACEHOLDER</code>
+                <code id="binance-pay-id">48416808</code>
                 <button
                   type="button"
                   class="btn btn-sm btn-outline copy-btn"
@@ -367,15 +382,15 @@
 
           <form id="order-form" novalidate>
             <div class="form-row">
-              <label for="denomination">Denomination</label>
+              <label for="denomination">Razer Gold Card</label>
               <select id="denomination" name="denomination" required>
-                <option value="">Select a denomination</option>
-                <option value="5">$5</option>
-                <option value="10">$10</option>
-                <option value="20">$20</option>
-                <option value="25">$25</option>
-                <option value="50">$50</option>
-                <option value="100">$100</option>
+                <option value="">Select a Razer Gold Card</option>
+                <option value="5">Razer Gold Card $5</option>
+                <option value="10">Razer Gold Card $10</option>
+                <option value="20">Razer Gold Card $20</option>
+                <option value="25">Razer Gold Card $25</option>
+                <option value="50">Razer Gold Card $50</option>
+                <option value="100">Razer Gold Card $100</option>
               </select>
             </div>
 
@@ -411,6 +426,7 @@
                     type="radio"
                     name="paymentMethod"
                     value="Binance"
+                    checked
                     required
                   />
                   Binance (Crypto)</label
@@ -426,6 +442,13 @@
                 >
               </div>
             </div>
+
+            <div
+              class="price-summary"
+              id="price-summary"
+              aria-live="polite"
+              hidden
+            ></div>
 
             <div class="form-row">
               <label for="transactionId">Transaction ID / TrxID</label>

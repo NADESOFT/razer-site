@@ -7,13 +7,15 @@ const RECAPTCHA_SITE_KEY = "6Lfvu4wtAAAAANdQaJgY0e6CGwogWHFYIP1BpI5B";
 const USD_TO_BDT_RATE = 122; // placeholder exchange rate, update as needed
 
 // Keep in sync with the denomination <option> values / product cards in index.html.
+// Prices are face value discounted 17% (DISCOUNT_RATE below) — update both if the discount changes.
+const DISCOUNT_RATE = 0.17;
 const DENOMINATIONS = [
-  { value: "5", price: 5.0 },
-  { value: "10", price: 10.0 },
-  { value: "20", price: 20.0 },
-  { value: "25", price: 25.0 },
-  { value: "50", price: 50.0 },
-  { value: "100", price: 100.0 },
+  { value: "5", face: 5.0, price: 4.15 },
+  { value: "10", face: 10.0, price: 8.3 },
+  { value: "20", face: 20.0, price: 16.6 },
+  { value: "25", face: 25.0, price: 20.75 },
+  { value: "50", face: 50.0, price: 41.5 },
+  { value: "100", face: 100.0, price: 83.0 },
 ];
 
 document.getElementById("year").textContent = new Date().getFullYear();
@@ -28,6 +30,44 @@ document.getElementById("year").textContent = new Date().getFullYear();
   }).join("");
 })();
 
+/* ---------- Order price summary (updates with denomination + payment method) ---------- */
+const denominationSelect = document.getElementById("denomination");
+const priceSummary = document.getElementById("price-summary");
+
+function updatePriceSummary() {
+  if (!denominationSelect || !priceSummary) return;
+  const denom = DENOMINATIONS.find((d) => d.value === denominationSelect.value);
+  if (!denom) {
+    priceSummary.hidden = true;
+    priceSummary.innerHTML = "";
+    return;
+  }
+  const paymentMethod = (
+    document.querySelector('input[name="paymentMethod"]:checked') || {}
+  ).value;
+
+  let label, value;
+  if (paymentMethod === "bKash") {
+    const bdt = Math.round(denom.price * USD_TO_BDT_RATE);
+    label = "You pay via bKash";
+    value = `৳${bdt.toLocaleString("en-US")} BDT`;
+  } else {
+    label = "You pay via Binance Pay";
+    value = `$${denom.price.toFixed(2)} USD`;
+  }
+
+  priceSummary.hidden = false;
+  priceSummary.innerHTML = `<span class="price-label">${label}</span><span class="price-value">${value}</span>`;
+}
+
+if (denominationSelect) {
+  denominationSelect.addEventListener("change", updatePriceSummary);
+}
+document.querySelectorAll('input[name="paymentMethod"]').forEach((radio) => {
+  radio.addEventListener("change", updatePriceSummary);
+});
+updatePriceSummary();
+
 /* ---------- Product card "Select" pre-fills the order form ---------- */
 document.querySelectorAll(".select-denom").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -35,6 +75,7 @@ document.querySelectorAll(".select-denom").forEach((btn) => {
     const denom = card.getAttribute("data-denom");
     const select = document.getElementById("denomination");
     if (select) select.value = denom;
+    updatePriceSummary();
     document
       .getElementById("order")
       .scrollIntoView({ behavior: "smooth", block: "start" });
@@ -167,6 +208,7 @@ form.addEventListener("submit", async (event) => {
         "success",
       );
       form.reset();
+      updatePriceSummary();
     } else {
       showStatus(
         result.error || "Something went wrong. Please try again or contact us.",
