@@ -2,42 +2,306 @@
  * Edit these constants before going live.
  */
 const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbyAwM3fHs5gEh256ZM8-oOPltIQWrUZfUSFE88SPeF3o-XarUPNWEVIwfTbmfaoBL95/exec";
+  "https://script.google.com/macros/s/AKfycbxvfRm7lM7U7AU6v1MBvOVnMEj8M0XsqSgES4NL5bXd9wmo7Tb37CR5neB9BiCnpgU4/exec";
 const RECAPTCHA_SITE_KEY = "6Lfvu4wtAAAAANdQaJgY0e6CGwogWHFYIP1BpI5B";
-const USD_TO_BDT_RATE = 122; // placeholder exchange rate, update as needed
 
-// Keep in sync with the denomination <option> values / product cards in index.html.
-// Discount tiers scale up with denomination — bigger cards get bigger savings, from 15% up to 17%.
-const DENOMINATIONS = [
-  { value: "5", face: 5.0, price: 4.25, discount: 0.15 },
-  { value: "10", face: 10.0, price: 8.5, discount: 0.15 },
-  { value: "20", face: 20.0, price: 16.8, discount: 0.16 },
-  { value: "25", face: 25.0, price: 21.0, discount: 0.16 },
-  { value: "50", face: 50.0, price: 41.5, discount: 0.17 },
-  { value: "100", face: 100.0, price: 83.0, discount: 0.17 },
+// Used only if the live catalog can't be fetched (e.g. Apps Script not
+// configured yet, or a temporary network/Google outage) so the page never
+// shows a blank product section. Once the Sheet is set up, real data from
+// it always takes priority over this.
+const FALLBACK_PRODUCTS = [
+  {
+    id: "razer-gold--5",
+    category: "Razer Gold",
+    name: "$5",
+    face: 5,
+    price: 4.25,
+    badge: "",
+  },
+  {
+    id: "razer-gold--10",
+    category: "Razer Gold",
+    name: "$10",
+    face: 10,
+    price: 8.5,
+    badge: "Popular",
+  },
+  {
+    id: "google-play--10",
+    category: "Google Play",
+    name: "$10",
+    face: 10,
+    price: 8.7,
+    badge: "",
+  },
+  {
+    id: "steam--20",
+    category: "Steam",
+    name: "$20",
+    face: 20,
+    price: 17.4,
+    badge: "",
+  },
+  {
+    id: "apple--25",
+    category: "Apple",
+    name: "$25",
+    face: 25,
+    price: 21.75,
+    badge: "",
+  },
+  {
+    id: "windows--windows-11-pro",
+    category: "Windows",
+    name: "Windows 11 Pro",
+    face: 199,
+    price: 149,
+    badge: "",
+  },
 ];
+const FALLBACK_SETTINGS = {
+  usdToBdtRate: 122,
+  binancePayId: "48416808",
+  bkashNumber: "01773371221",
+};
+
+let PRODUCTS = [];
+let REVIEWS = [];
+let SETTINGS = Object.assign({}, FALLBACK_SETTINGS);
+let activeCategory = "All";
+let currentPage = 1;
+const ROWS_PER_PAGE = 2;
 
 document.getElementById("year").textContent = new Date().getFullYear();
 
-/* ---------- BDT price table ---------- */
-(function renderBdtTable() {
-  const tbody = document.getElementById("bdt-table-body");
-  if (!tbody) return;
-  tbody.innerHTML = DENOMINATIONS.map((d) => {
-    const bdt = Math.round(d.price * USD_TO_BDT_RATE);
-    const saveUsd = (d.face - d.price).toFixed(2);
-    return `<tr><td>Razer Gold $${d.value}</td><td>$${d.price.toFixed(2)}</td><td class="save-cell">-${Math.round(d.discount * 100)}% ($${saveUsd})</td><td>৳${bdt.toLocaleString("en-US")}</td></tr>`;
-  }).join("");
+/* ---------- Helpers ---------- */
+function usd(n) {
+  return `$${Number(n).toFixed(2)}`;
+}
+function savings(product) {
+  const save = product.face - product.price;
+  if (save <= 0.004) return null;
+  return {
+    saveUsd: save.toFixed(2),
+    savePct: Math.round((save / product.face) * 100),
+  };
+}
+function bdt(usdAmount) {
+  return `৳${Math.round(usdAmount * SETTINGS.usdToBdtRate).toLocaleString("en-US")}`;
+}
+function categoriesInOrder(products) {
+  const seen = [];
+  products.forEach((p) => {
+    if (!seen.includes(p.category)) seen.push(p.category);
+  });
+  return seen;
+}
+const ESCAPE_MAP = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ESCAPE_MAP[ch]);
+}
+
+/* ---------- Catalog fetch ---------- */
+async function loadCatalog() {
+  const grid = document.getElementById("product-grid");
+  try {
+    if (APPS_SCRIPT_URL.includes("PASTE_DEPLOYED"))
+      throw new Error("not configured");
+    const response = await fetch(`${APPS_SCRIPT_URL}?action=catalog`);
+    const result = await response.json();
+    if (
+      !result.ok ||
+      !Array.isArray(result.products) ||
+      result.products.length === 0
+    ) {
+      throw new Error("empty catalog");
+    }
+    PRODUCTS = result.products;
+    SETTINGS = Object.assign({}, FALLBACK_SETTINGS, result.settings || {});
+    REVIEWS = Array.isArray(result.reviews) ? result.reviews : [];
+  } catch (err) {
+    PRODUCTS = FALLBACK_PRODUCTS;
+    SETTINGS = FALLBACK_SETTINGS;
+    REVIEWS = [];
+    const notice = document.getElementById("catalog-notice");
+    if (notice) {
+      notice.hidden = false;
+      notice.textContent =
+        "Showing example pricing — live catalog is temporarily unavailable. Refresh to try again.";
+    }
+  }
+  if (grid) grid.classList.remove("is-loading");
+  renderPaymentSettings();
+  renderCategoryPills();
+  renderProductGrid();
+  renderProductListbox();
+  renderCatalogStructuredData();
+  renderReviews();
+  updatePriceSummary();
+}
+
+/* ---------- Payment settings (Binance Pay ID / bKash number) ---------- */
+function renderPaymentSettings() {
+  const payId = document.getElementById("binance-pay-id");
+  const bkashNum = document.getElementById("bkash-number");
+  if (payId) payId.textContent = SETTINGS.binancePayId;
+  if (bkashNum) bkashNum.textContent = SETTINGS.bkashNumber;
+}
+
+/* ---------- Category pills ---------- */
+function renderCategoryPills() {
+  const wrap = document.getElementById("category-pills");
+  if (!wrap) return;
+  const categories = ["All", ...categoriesInOrder(PRODUCTS)];
+  wrap.innerHTML = categories
+    .map(
+      (cat) =>
+        `<button type="button" class="pill${cat === activeCategory ? " is-active" : ""}" data-category="${cat}">${cat}</button>`,
+    )
+    .join("");
+
+  wrap.querySelectorAll(".pill").forEach((pill) => {
+    pill.addEventListener("click", () => {
+      activeCategory = pill.dataset.category;
+      currentPage = 1;
+      wrap
+        .querySelectorAll(".pill")
+        .forEach((p) => p.classList.toggle("is-active", p === pill));
+      renderProductGrid();
+    });
+  });
+}
+
+/* ---------- Product grid ---------- */
+function productCardHTML(product) {
+  const save = savings(product);
+  const category = escapeHtml(product.category);
+  const name = escapeHtml(product.name);
+  const badge = escapeHtml(product.badge);
+  const featuredClass = product.badge ? " product-card-featured" : "";
+  const ribbon = product.badge
+    ? `<span class="featured-ribbon">${badge}</span>`
+    : save
+      ? `<span class="discount-badge">-${save.savePct}%</span>`
+      : "";
+  const caption = save
+    ? `${name} &middot; <span class="save-amount">Save $${save.saveUsd}</span>`
+    : name;
+
+  return `
+    <article class="product-card${featuredClass}" data-id="${product.id}" role="button" tabindex="0" aria-label="Select ${category} ${name} — pay ${usd(product.price)}${save ? `, save $${save.saveUsd}` : ""}">
+      ${ribbon}
+      <span class="card-brand">${category}</span>
+      <span class="product-face">${usd(product.price)}</span>
+      <span class="card-caption">${caption}</span>
+      <span class="select-cta">Select</span>
+    </article>`;
+}
+
+/** Reads the grid's actual current column count (responsive, via auto-fill) so pagination always shows exactly ROWS_PER_PAGE rows regardless of viewport. */
+function getColumnsPerRow() {
+  const grid = document.getElementById("product-grid");
+  if (!grid) return 1;
+  const tracks = getComputedStyle(grid)
+    .gridTemplateColumns.split(" ")
+    .filter(Boolean);
+  return Math.max(tracks.length, 1);
+}
+
+function renderProductGrid() {
+  const grid = document.getElementById("product-grid");
+  if (!grid) return;
+  const filtered =
+    activeCategory === "All"
+      ? PRODUCTS
+      : PRODUCTS.filter((p) => p.category === activeCategory);
+
+  const pageSize = getColumnsPerRow() * ROWS_PER_PAGE;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  currentPage = Math.min(Math.max(currentPage, 1), totalPages);
+  const start = (currentPage - 1) * pageSize;
+  const visible = filtered.slice(start, start + pageSize);
+
+  grid.innerHTML =
+    visible.map(productCardHTML).join("") ||
+    `<p class="section-sub">No products in this category yet.</p>`;
+  renderPagination(totalPages);
+}
+
+function renderPagination(totalPages) {
+  const wrap = document.getElementById("product-pagination");
+  if (!wrap) return;
+  if (totalPages <= 1) {
+    wrap.innerHTML = "";
+    return;
+  }
+  wrap.innerHTML = `
+    <button type="button" class="page-btn" id="page-prev" ${currentPage === 1 ? "disabled" : ""}>&larr; Prev</button>
+    <span class="page-status">Page ${currentPage} of ${totalPages}</span>
+    <button type="button" class="page-btn" id="page-next" ${currentPage === totalPages ? "disabled" : ""}>Next &rarr;</button>
+  `;
+  const goTo = (page) => {
+    currentPage = page;
+    renderProductGrid();
+    document
+      .getElementById("products")
+      .scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const prevBtn = document.getElementById("page-prev");
+  const nextBtn = document.getElementById("page-next");
+  if (prevBtn) prevBtn.addEventListener("click", () => goTo(currentPage - 1));
+  if (nextBtn) nextBtn.addEventListener("click", () => goTo(currentPage + 1));
+}
+
+let productGridResizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(productGridResizeTimer);
+  productGridResizeTimer = setTimeout(() => {
+    currentPage = 1;
+    renderProductGrid();
+  }, 200);
+});
+
+function chooseProduct(id) {
+  const select = document.getElementById("product");
+  if (!select) return;
+  select.value = id;
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  document
+    .getElementById("order")
+    .scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+(function setupProductGridEvents() {
+  const grid = document.getElementById("product-grid");
+  if (!grid) return;
+  grid.addEventListener("click", (e) => {
+    const card = e.target.closest(".product-card");
+    if (card) chooseProduct(card.dataset.id);
+  });
+  grid.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const card = e.target.closest(".product-card");
+    if (!card) return;
+    e.preventDefault();
+    chooseProduct(card.dataset.id);
+  });
 })();
 
-/* ---------- Order price summary (updates with denomination + payment method) ---------- */
-const denominationSelect = document.getElementById("denomination");
+/* ---------- Order price summary ---------- */
+const productSelect = document.getElementById("product");
 const priceSummary = document.getElementById("price-summary");
 
 function updatePriceSummary() {
-  if (!denominationSelect || !priceSummary) return;
-  const denom = DENOMINATIONS.find((d) => d.value === denominationSelect.value);
-  if (!denom) {
+  if (!productSelect || !priceSummary) return;
+  const product = PRODUCTS.find((p) => p.id === productSelect.value);
+  if (!product) {
     priceSummary.hidden = true;
     priceSummary.innerHTML = "";
     return;
@@ -48,154 +312,109 @@ function updatePriceSummary() {
 
   let label, value;
   if (paymentMethod === "bKash") {
-    const bdt = Math.round(denom.price * USD_TO_BDT_RATE);
     label = "You pay via bKash";
-    value = `৳${bdt.toLocaleString("en-US")} BDT`;
+    value = `${bdt(product.price)} BDT`;
   } else {
     label = "You pay via Binance Pay";
-    value = `$${denom.price.toFixed(2)} USD`;
+    value = `${usd(product.price)} USD`;
   }
-  const saveUsd = (denom.face - denom.price).toFixed(2);
-  const savePct = Math.round(denom.discount * 100);
+  const save = savings(product);
 
   priceSummary.hidden = false;
   priceSummary.innerHTML = `
     <span class="price-label">${label}</span>
     <span class="price-value-group">
       <span class="price-value">${value}</span>
-      <span class="price-savings">You save $${saveUsd} (${savePct}% off)</span>
+      ${save ? `<span class="price-savings">You save $${save.saveUsd} (${save.savePct}% off)</span>` : ""}
     </span>`;
 }
 
-if (denominationSelect) {
-  denominationSelect.addEventListener("change", updatePriceSummary);
+if (productSelect) {
+  productSelect.addEventListener("change", updatePriceSummary);
 }
 document.querySelectorAll('input[name="paymentMethod"]').forEach((radio) => {
   radio.addEventListener("change", updatePriceSummary);
 });
-updatePriceSummary();
 
-/* ---------- Product cards: whole card is clickable, selects the denomination ---------- */
-(function setupProductCards() {
-  const grid = document.querySelector(".product-grid");
-  if (!grid) return;
-  const cards = Array.from(grid.querySelectorAll(".product-card"));
+/* ---------- Custom dropdown for the Product field ---------- */
+const customSelectTrigger = document.getElementById("product-trigger");
+const customSelectValue = document.getElementById("product-value");
+const customSelectListbox = document.getElementById("product-listbox");
 
-  cards.forEach((card) => {
-    const denom = DENOMINATIONS.find(
-      (d) => d.value === card.getAttribute("data-denom"),
+function closeProductListbox() {
+  if (!customSelectListbox) return;
+  customSelectListbox.hidden = true;
+  customSelectTrigger.setAttribute("aria-expanded", "false");
+}
+
+function openProductListbox() {
+  if (!customSelectListbox) return;
+  customSelectListbox.hidden = false;
+  customSelectTrigger.setAttribute("aria-expanded", "true");
+  const current =
+    customSelectListbox.querySelector(
+      `[data-value="${productSelect.value}"]`,
+    ) || customSelectListbox.querySelector(".custom-select-option");
+  if (current) current.focus();
+}
+
+function syncProductTriggerLabel() {
+  if (!customSelectValue) return;
+  const product = PRODUCTS.find((p) => p.id === productSelect.value);
+  customSelectValue.textContent = product
+    ? `${product.category} ${product.name}`
+    : "Select a product";
+  customSelectValue.classList.toggle("is-placeholder", !product);
+  customSelectListbox.querySelectorAll(".custom-select-option").forEach((o) => {
+    o.setAttribute(
+      "aria-selected",
+      String(o.dataset.value === productSelect.value),
     );
-    if (denom) {
-      const saveUsd = (denom.face - denom.price).toFixed(2);
-      card.setAttribute(
-        "aria-label",
-        `Select Razer Gold $${denom.value} — pay $${denom.price.toFixed(2)}, save $${saveUsd}`,
-      );
-    }
   });
+}
 
-  function chooseCard(card) {
-    const denom = card.getAttribute("data-denom");
-    if (denominationSelect) {
-      denominationSelect.value = denom;
-      denominationSelect.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    document
-      .getElementById("order")
-      .scrollIntoView({ behavior: "smooth", block: "start" });
+function selectProduct(value) {
+  productSelect.value = value;
+  productSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  closeProductListbox();
+  customSelectTrigger.focus();
+}
+
+function renderProductListbox() {
+  if (!productSelect) return;
+  const previousValue = productSelect.value;
+  productSelect.innerHTML =
+    '<option value="">Select a product</option>' +
+    PRODUCTS.map(
+      (p) =>
+        `<option value="${p.id}">${escapeHtml(p.category)} ${escapeHtml(p.name)}</option>`,
+    ).join("");
+  if (PRODUCTS.some((p) => p.id === previousValue)) {
+    productSelect.value = previousValue;
   }
 
-  grid.addEventListener("click", (e) => {
-    const card = e.target.closest(".product-card");
-    if (card) chooseCard(card);
-  });
-  grid.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    const card = e.target.closest(".product-card");
-    if (!card) return;
-    e.preventDefault();
-    chooseCard(card);
-  });
-})();
-
-/* ---------- Custom dropdown for the Razer Gold Card field ---------- */
-(function setupCustomSelect() {
-  const trigger = document.getElementById("denomination-trigger");
-  const valueEl = document.getElementById("denomination-value");
-  const listbox = document.getElementById("denomination-listbox");
-  if (!trigger || !valueEl || !listbox || !denominationSelect) return;
-
-  listbox.innerHTML = DENOMINATIONS.map((d) => {
-    const savePct = Math.round(d.discount * 100);
+  if (!customSelectListbox) return;
+  customSelectListbox.innerHTML = PRODUCTS.map((p) => {
+    const save = savings(p);
     return `
-      <li role="option" class="custom-select-option" id="denom-opt-${d.value}" data-value="${d.value}" tabindex="-1" aria-selected="false">
-        <span class="opt-name">Razer Gold $${d.value}</span>
-        <span class="opt-price"><s>$${d.face.toFixed(2)}</s> $${d.price.toFixed(2)} <span class="opt-discount">-${savePct}%</span></span>
+      <li role="option" class="custom-select-option" data-value="${p.id}" tabindex="-1" aria-selected="false">
+        <span class="opt-name">${escapeHtml(p.category)} ${escapeHtml(p.name)}</span>
+        <span class="opt-price">${save ? `<s>${usd(p.face)}</s> ` : ""}${usd(p.price)}${save ? ` <span class="opt-discount">-${save.savePct}%</span>` : ""}</span>
       </li>`;
   }).join("");
 
   const options = Array.from(
-    listbox.querySelectorAll(".custom-select-option"),
+    customSelectListbox.querySelectorAll(".custom-select-option"),
   );
-
-  function closeListbox() {
-    listbox.hidden = true;
-    trigger.setAttribute("aria-expanded", "false");
-  }
-
-  function openListbox() {
-    listbox.hidden = false;
-    trigger.setAttribute("aria-expanded", "true");
-    const current =
-      options.find((o) => o.dataset.value === denominationSelect.value) ||
-      options[0];
-    if (current) current.focus();
-  }
-
-  function syncTriggerLabel() {
-    const denom = DENOMINATIONS.find(
-      (d) => d.value === denominationSelect.value,
-    );
-    valueEl.textContent = denom
-      ? `Razer Gold $${denom.value}`
-      : "Select a Razer Gold Card";
-    valueEl.classList.toggle("is-placeholder", !denom);
-    options.forEach((o) => {
-      o.setAttribute(
-        "aria-selected",
-        String(o.dataset.value === denominationSelect.value),
-      );
-    });
-  }
-
-  function selectValue(value) {
-    denominationSelect.value = value;
-    denominationSelect.dispatchEvent(new Event("change", { bubbles: true }));
-    closeListbox();
-    trigger.focus();
-  }
-
-  trigger.addEventListener("click", () => {
-    if (listbox.hidden) openListbox();
-    else closeListbox();
-  });
-
-  trigger.addEventListener("keydown", (e) => {
-    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      openListbox();
-    }
-  });
-
   options.forEach((option, index) => {
-    option.addEventListener("click", () => selectValue(option.dataset.value));
+    option.addEventListener("click", () => selectProduct(option.dataset.value));
     option.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        selectValue(option.dataset.value);
+        selectProduct(option.dataset.value);
       } else if (e.key === "Escape") {
-        closeListbox();
-        trigger.focus();
+        closeProductListbox();
+        customSelectTrigger.focus();
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
         (options[index + 1] || options[0]).focus();
@@ -203,20 +422,111 @@ updatePriceSummary();
         e.preventDefault();
         (options[index - 1] || options[options.length - 1]).focus();
       } else if (e.key === "Tab") {
-        closeListbox();
+        closeProductListbox();
       }
     });
   });
 
-  document.addEventListener("click", (e) => {
-    if (!listbox.hidden && !e.target.closest(".custom-select")) {
-      closeListbox();
+  syncProductTriggerLabel();
+}
+
+if (customSelectTrigger && customSelectListbox && productSelect) {
+  customSelectTrigger.addEventListener("click", () => {
+    if (customSelectListbox.hidden) openProductListbox();
+    else closeProductListbox();
+  });
+  customSelectTrigger.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openProductListbox();
     }
   });
+  document.addEventListener("click", (e) => {
+    if (!customSelectListbox.hidden && !e.target.closest(".custom-select")) {
+      closeProductListbox();
+    }
+  });
+  productSelect.addEventListener("change", syncProductTriggerLabel);
+}
 
-  denominationSelect.addEventListener("change", syncTriggerLabel);
-  syncTriggerLabel();
-})();
+/* ---------- Structured data (built from the real live catalog) ---------- */
+function renderCatalogStructuredData() {
+  const existing = document.getElementById("catalog-jsonld");
+  if (existing) existing.remove();
+  if (PRODUCTS.length === 0) return;
+
+  const itemListElement = PRODUCTS.slice(0, 30).map((p, i) => ({
+    "@type": "ListItem",
+    position: i + 1,
+    item: {
+      "@type": "Product",
+      name: `${p.category} ${p.name}`,
+      brand: { "@type": "Brand", name: p.category },
+      offers: {
+        "@type": "Offer",
+        priceCurrency: "USD",
+        price: p.price.toFixed(2),
+        availability: "https://schema.org/InStock",
+      },
+    },
+  }));
+
+  const script = document.createElement("script");
+  script.type = "application/ld+json";
+  script.id = "catalog-jsonld";
+  script.textContent = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    itemListElement,
+  });
+  document.head.appendChild(script);
+}
+
+/* ---------- Reviews slider (sourced from the Reviews sheet tab) ---------- */
+function reviewCardHTML(review) {
+  const stars = "★".repeat(review.rating) + "☆".repeat(5 - review.rating);
+  const name = escapeHtml(review.name);
+  const text = escapeHtml(review.text);
+  const date = escapeHtml(review.date);
+  return `
+    <article class="review-card">
+      <div class="review-stars" aria-label="${review.rating} out of 5 stars">${stars}</div>
+      <p class="review-text">"${text}"</p>
+      <p class="review-author">&mdash; ${name}${date ? `, ${date}` : ""}</p>
+    </article>`;
+}
+
+function renderReviews() {
+  const emptyState = document.getElementById("reviews-empty");
+  const sliderWrap = document.getElementById("reviews-slider-wrap");
+  const slider = document.getElementById("reviews-slider");
+  if (!emptyState || !sliderWrap || !slider) return;
+
+  if (REVIEWS.length === 0) {
+    emptyState.hidden = false;
+    sliderWrap.hidden = true;
+    slider.innerHTML = "";
+    return;
+  }
+
+  emptyState.hidden = true;
+  sliderWrap.hidden = false;
+  slider.innerHTML = REVIEWS.map(reviewCardHTML).join("");
+
+  const prevBtn = document.getElementById("reviews-prev");
+  const nextBtn = document.getElementById("reviews-next");
+  const scrollByCard = (direction) => {
+    const card = slider.querySelector(".review-card");
+    const step = card
+      ? card.getBoundingClientRect().width + 16
+      : slider.clientWidth * 0.8;
+    slider.scrollBy({ left: direction * step, behavior: "smooth" });
+  };
+  if (prevBtn) prevBtn.onclick = () => scrollByCard(-1);
+  if (nextBtn) nextBtn.onclick = () => scrollByCard(1);
+}
+
+loadCatalog();
 
 /* ---------- Copy-to-clipboard ---------- */
 document.querySelectorAll(".copy-btn").forEach((btn) => {
@@ -302,8 +612,8 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   showStatus("", "");
 
-  if (!denominationSelect.value) {
-    showStatus("Please select a Razer Gold Card.", "error");
+  if (!productSelect.value) {
+    showStatus("Please select a product.", "error");
     return;
   }
 
@@ -334,6 +644,7 @@ form.addEventListener("submit", async (event) => {
 
   const formData = new FormData(form);
   const payload = Object.fromEntries(formData.entries());
+  payload.productId = productSelect.value;
 
   try {
     const response = await fetch(APPS_SCRIPT_URL, {
